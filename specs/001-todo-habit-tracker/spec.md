@@ -124,6 +124,11 @@
 - **FR-016**: System MUST provide automatically generated OpenAPI documentation containing public request, response, error, and authentication examples.
 - **FR-017**: System MUST exclude team collaboration, sharing, notifications, and push notifications from the first phase.
 
+### Non-Functional Requirements
+
+- **NFR-001**: Every data-changing operation, including Todo and Habit creation, update, and deletion and Habit check-in, MUST make the successful API response and durable persistence one indivisible outcome. The system MUST NOT return success before the data is successfully persisted; if persistence fails, it MUST return an explicit error and MUST NOT leave a state where the API reports success but the data is not durable.
+- **NFR-002**: Every data-changing operation MUST produce one immutable audit record containing the acting user's identifier, operation type (create, update, delete, or check-in), affected entity and identifier, values before and after the change, occurrence time in UTC, and request identifier. Audit records MUST be stored separately from ordinary application logs and MUST NOT be modified or deleted by normal application logic.
+
 ### Key Entities _(include if feature involves data)_
 
 - **User**: A person with a unique Email and protected password credential who owns personal records.
@@ -143,6 +148,8 @@
 - **SC-005**: At least 90% of representative users can complete registration, create a Todo, create a Habit, record a check-in, and view progress without assistance.
 - **SC-006**: 100% of public operations have discoverable documentation with valid request, response, error, and authentication examples before release.
 - **SC-007**: The first-phase release contains no user-visible collaboration, sharing, notification, or push-notification behavior.
+- **SC-008**: 100% of successful Todo, Habit, and Habit check-in mutation responses are preceded by verified durable persistence; 100% of simulated persistence failures return an explicit error and no successful response.
+- **SC-009**: 100% of Todo, Habit, and Habit check-in mutation operations produce exactly one immutable audit record containing the required actor, operation, entity, before/after values, UTC timestamp, and request identifier, with no audit record editable or removable through normal application operations.
 
 ## Assumptions
 

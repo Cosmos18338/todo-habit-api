@@ -28,6 +28,8 @@
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [x] No implementation details leak into specification
+- [x] Data-changing operations define durable persistence and failure consistency requirements
+- [x] Data-changing operations define immutable audit trail contents and protection requirements
 
 ## Notes
 
