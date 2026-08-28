@@ -52,6 +52,7 @@
 3. **Given** 使用者擁有 Todo，**When** 使用者更新描述、到期日、優先級或完成狀態，**Then** 系統只更新指定欄位並回傳更新後資料。
 4. **Given** 使用者擁有 Todo，**When** 使用者刪除該 Todo，**Then** 系統刪除資料且後續查詢不再回傳該 Todo。
 5. **Given** Todo 標題為空或優先級不在允許範圍，**When** 使用者提交資料，**Then** 系統拒絕請求並指出欄位驗證錯誤。
+6. **Given** 使用者查詢 Todo 清單，**When** 使用者未提供分頁參數或提供有效的 `page` 與 `page_size`，**Then** 系統依預設每頁 20 筆或指定的每頁筆數回傳分頁結果，且每頁最多 100 筆。
 
 ---
 
@@ -71,6 +72,7 @@
 4. **Given** Habit 的打卡歷史中有中斷日期，**When** 使用者查詢 streak，**Then** 目前 streak 從最近一次連續區段計算，最長 streak 保留歷史最高值。
 5. **Given** 同一 Habit 同一日期已打卡，**When** 使用者再次打卡，**Then** 系統不產生重複紀錄，並回傳可辨識的衝突結果。
 6. **Given** 頻率或目標次數不符合規則，**When** 使用者建立或更新 Habit，**Then** 系統拒絕請求並回傳欄位驗證錯誤；Weekly 的目標次數必須是 1 至 7 的整數，Daily 的目標次數必須為 1。
+7. **Given** 使用者查詢 Habit 清單，**When** 使用者未提供分頁參數或提供有效的 `page` 與 `page_size`，**Then** 系統依預設每頁 20 筆或指定的每頁筆數回傳分頁結果，且每頁最多 100 筆。
 
 ---
 
@@ -101,6 +103,10 @@
 - 打卡日期不可產生重複紀錄；未來日期是否可打卡採用不允許的預設，以避免提前灌入進度。
 - 日期範圍為單日、跨月、跨年與很大的範圍時，結果仍使用相同格式並正確包含邊界日期。
 - 刪除 Habit 時，其打卡歷史不得在查詢中成為孤兒資料。
+- Todo 或 Habit 清單沒有資料時，分頁回應回傳空的 `items`，並保留一致的分頁 metadata，不回傳錯誤。
+- 使用者查詢超出最後一頁的頁碼時，系統回傳空的 `items` 與正確的總筆數及頁碼 metadata，不回傳錯誤。
+- `page_size` 未提供時預設為 20；`page_size` 可達到但不可超過最大單頁上限 100，超過上限或小於 1 時系統拒絕請求並回傳一致的驗證錯誤。
+- `page` 未提供時預設為 1；小於 1 或不是整數時系統拒絕請求並回傳一致的驗證錯誤。
 
 ## Requirements _(mandatory)_
 
@@ -123,6 +129,7 @@
 - **FR-015**: System MUST validate all external input before business rules execute, store passwords only as secure hashes, issue a Refresh Token valid for 7 days in an HttpOnly Secure Cookie for automatic Access Token renewal, never store tokens in localStorage, and never expose password hashes or authentication secrets in responses.
 - **FR-016**: System MUST provide automatically generated OpenAPI documentation containing public request, response, error, and authentication examples.
 - **FR-017**: System MUST exclude team collaboration, sharing, notifications, and push notifications from the first phase.
+- **FR-018**: System MUST support pagination for Todo and Habit list queries using a positive `page` number and `page_size`; `page` MUST default to 1, `page_size` MUST default to 20, and `page_size` MUST NOT exceed the maximum of 100 items per page. The response MUST include the returned items and consistent pagination metadata including the current page, page size, total item count, and total page count. An empty list or a page beyond the last page MUST return an empty items collection with valid metadata rather than an error.
 
 ### Non-Functional Requirements
 
@@ -152,6 +159,7 @@
 - **SC-008**: 100% of successful Todo, Habit, and Habit check-in mutation responses are preceded by verified durable persistence; 100% of simulated persistence failures return an explicit error and no successful response.
 - **SC-009**: 100% of Todo, Habit, and Habit check-in mutation operations produce exactly one immutable audit record containing the required actor, operation, entity, before/after values, UTC timestamp, and request identifier, with no audit record editable or removable through normal application operations.
 - **SC-010**: 100% of API request test cases produce an application log containing the request identifier, authenticated user identifier or anonymous marker, processing time, and result status; validation, authentication, and database connection failures are recorded with distinguishable severity levels, and application logging is verified independently from NFR-002 audit records.
+- **SC-011**: 100% of Todo and Habit list queries return no more than 100 items in a response, use a default page size of 20 when omitted, return valid pagination metadata for empty lists and pages beyond the last page, and reject page sizes above 100 or below 1 with the standard validation error format.
 
 ## Assumptions
 
