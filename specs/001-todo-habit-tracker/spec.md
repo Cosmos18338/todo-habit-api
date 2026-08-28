@@ -128,6 +128,7 @@
 
 - **NFR-001**: Every data-changing operation, including Todo and Habit creation, update, and deletion and Habit check-in, MUST make the successful API response and durable persistence one indivisible outcome. The system MUST NOT return success before the data is successfully persisted; if persistence fails, it MUST return an explicit error and MUST NOT leave a state where the API reports success but the data is not durable.
 - **NFR-002**: Every data-changing operation MUST produce one immutable audit record containing the acting user's identifier, operation type (create, update, delete, or check-in), affected entity and identifier, values before and after the change, occurrence time in UTC, and request identifier. Audit records MUST be stored separately from ordinary application logs and MUST NOT be modified or deleted by normal application logic.
+- **NFR-003**: Every API request, including non-mutating requests, MUST produce an application log containing the request identifier, the authenticated user's identifier or an anonymous marker, processing time, and result status. Key failures, including validation failures, authentication failures, and database connection failures, MUST have distinguishable severity levels such as WARNING or ERROR. Application logs serve a different purpose from the audit records in NFR-002, MAY use separate storage, and do not require transaction consistency with business data.
 
 ### Key Entities _(include if feature involves data)_
 
@@ -150,6 +151,7 @@
 - **SC-007**: The first-phase release contains no user-visible collaboration, sharing, notification, or push-notification behavior.
 - **SC-008**: 100% of successful Todo, Habit, and Habit check-in mutation responses are preceded by verified durable persistence; 100% of simulated persistence failures return an explicit error and no successful response.
 - **SC-009**: 100% of Todo, Habit, and Habit check-in mutation operations produce exactly one immutable audit record containing the required actor, operation, entity, before/after values, UTC timestamp, and request identifier, with no audit record editable or removable through normal application operations.
+- **SC-010**: 100% of API request test cases produce an application log containing the request identifier, authenticated user identifier or anonymous marker, processing time, and result status; validation, authentication, and database connection failures are recorded with distinguishable severity levels, and application logging is verified independently from NFR-002 audit records.
 
 ## Assumptions
 

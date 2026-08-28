@@ -30,6 +30,7 @@
 - [x] No implementation details leak into specification
 - [x] Data-changing operations define durable persistence and failure consistency requirements
 - [x] Data-changing operations define immutable audit trail contents and protection requirements
+- [x] All API requests define application logging fields, failure severity, and separation from audit records
 
 ## Notes
 
