@@ -38,6 +38,19 @@
 
 **Scale/Scope**: 第一階段單一 API 服務與單一 PostgreSQL；個人使用者、Todo、Habit、Habit check-in、進度查詢與 OpenAPI 文件；不需既有資料 migration
 
+## CI/CD
+
+使用 GitHub Actions 的 `.github/workflows/ci.yml` 作為持續整合工作流。工作流必須在指向 `main` 的 Pull Request 發生 `opened`、`synchronize` 或 `reopened` 時觸發，確保來源分支每次新增 commit 都重新執行檢查；也必須在直接推送到 `main` 時執行，作為合併後的最終驗證。
+
+CI job 依序執行：
+
+1. 安裝鎖定的 Python 版本與相依套件。
+2. 執行 `ruff check` 進行 Lint。
+3. 執行 Pytest 測試。
+4. 執行 `pytest --cov=app/services --cov=app/repositories`，並對 Service 與 Repository 個別套用至少 80% 覆蓋率門檻；任一層低於門檻時 workflow 必須失敗。
+
+此工作流在專案骨架建立後立即建立，讓後續每個實作任務都可獲得 PR 與 main push 的 CI 回饋。
+
 ## Constitution Check
 
 _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
@@ -100,6 +113,9 @@ tests/
 docker-compose.yml
 Dockerfile
 pyproject.toml
+.github/
+└── workflows/
+  └── ci.yml
 ```
 
 **Structure Decision**: Single backend web-service project rooted at `app/`, with explicit Router -> Service -> Repository -> Model boundaries. `schemas/` owns Pydantic request/response contracts; `db/uow.py` owns transaction scope; `utils/` owns authentication, request context, errors, clock and logging helpers. Alembic and tests remain top-level. This matches the requested layered architecture and keeps public API contracts separate from persistence models.
