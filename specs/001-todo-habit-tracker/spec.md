@@ -6,107 +6,113 @@
 
 **Status**: Draft
 
-**Input**: User description: "開發一個 Todo/Habit Tracker API，讓使用者管理待辦事項與習慣追蹤。包含使用者註冊與登入、Todo 與 Habit 的完整管理、Habit 每日打卡與 streak 計算、依日期範圍查詢完成率與打卡歷史，以及使用者資料隔離；第一階段不包含團隊協作、分享、通知或推播。"
+**Input**: User description: "Develop a Todo/Habit Tracker API that enables users to manage tasks and habit tracking. Include user registration and login, complete Todo and Habit management, daily Habit check-ins and streak calculations, date-range queries for completion rates and check-in history, and user data isolation; the first phase excludes team collaboration, sharing, notifications, and push notifications."
 
 ## Clarifications
 
 ### Session 2026-08-28
 
-- Q: Todo 完成率的日期範圍應該依哪個日期欄位篩選 Todo？ → A: 依 `due_date` 篩選；沒有到期日的 Todo 不納入日期範圍統計。
-- Q: Weekly Habit 的 `target_count` 應如何影響打卡與 streak 計算？ → A: 每週需完成至少 `target_count` 次，streak 以連續達成週數計算；Weekly 的 `target_count` 必須是 1 至 7 的整數，Daily 的 `target_count` 固定為 1。
-- Q: 服務計算日曆日與日曆週時，應採用哪個預設時區？ → A: UTC。
-- Q: 註冊與登入使用的密碼最低驗證規則應為何？ → A: 至少 8 個字元。
-- Q: 登入後取得的 JWT 身分憑證應在多久後過期？ → A: Access Token 效期 15 分鐘，搭配效期 7 天、儲存於 `HttpOnly Secure Cookie` 的 Refresh Token 自動換發；任何 Token 都不儲存於 `localStorage`。
+- Q: Which date field should filter Todo records for a Todo completion-rate date range? → A: Filter by `due_date`; Todo records without a due date are excluded from date-range statistics.
+- Q: How should a Weekly Habit's `target_count` affect check-ins and streak calculations? → A: At least `target_count` check-ins must be completed each week, and the streak is calculated from consecutive achieved weeks; a Weekly `target_count` must be an integer from 1 through 7, and a Daily `target_count` is fixed at 1.
+- Q: Which default timezone should the service use when calculating calendar dates and calendar weeks? → A: UTC.
+- Q: Which day is the first day of a calendar week? → A: Monday, following the ISO 8601 convention.
+- Q: What is the minimum password validation rule for registration and login? → A: At least 8 characters.
+- Q: When do JWT credentials obtained after login expire? → A: The Access Token is valid for 15 minutes and is automatically renewed with a Refresh Token valid for 7 days and stored in an `HttpOnly Secure Cookie`; no Token is stored in `localStorage`.
+- Q: How should the Refresh Token be handled when a user actively logs out? → A: Revoke the current Refresh Token so subsequent renewal requests fail.
+- Q: What should the SameSite attribute of the Refresh Token Cookie be? → A: `SameSite=Strict`.
+- Q: What format should all error responses use? → A: `{ "error": { "code": string, "message": string, "details": array } }`.
+- Q: How should a request to delete a nonexistent resource or a resource not owned by the user be handled? → A: Always treat it as a not-found resource outcome, without distinguishing nonexistence from lack of authorization.
+- Q: How should concurrent check-in requests for the same Habit on the same date be handled? → A: Permit only one successful write; all others return an identifiable conflict outcome and must not create a second record.
 
 ## User Scenarios & Testing _(mandatory)_
 
-### User Story 1 - 建立帳號並登入 (Priority: P1)
+### User Story 1 - Create an Account and Log In (Priority: P1)
 
-新使用者可以使用 Email 與密碼建立個人帳號，之後登入並取得可存取個人資料的身分。既有使用者使用錯誤憑證時，系統拒絕登入且不洩漏帳號是否存在。
+New users can create a personal account with an Email and password, then log in and obtain an identity that can access personal data. When an existing user supplies invalid credentials, the system rejects the login without revealing whether the account exists.
 
-**Why this priority**: 身分識別是所有個人資料隔離與後續功能的前提。
+**Why this priority**: Identity is a prerequisite for all personal-data isolation and subsequent functionality.
 
-**Independent Test**: 可透過註冊、成功登入、錯誤登入與重複 Email 案例獨立驗證，不需要 Todo 或 Habit 資料。
+**Independent Test**: Can be independently verified through registration, successful login, invalid login, and duplicate Email cases, without Todo or Habit data.
 
 **Acceptance Scenarios**:
 
-1. **Given** Email 尚未註冊且密碼至少 8 個字元，**When** 使用者提交註冊資料，**Then** 系統建立帳號並回傳成功結果，且不回傳明文密碼。
-2. **Given** Email 已註冊，**When** 使用者再次以相同 Email 註冊，**Then** 系統拒絕請求並回傳一致的驗證錯誤格式。
-3. **Given** 使用者已註冊，**When** 使用者提交正確 Email 與密碼登入，**Then** 系統回傳可用於後續受保護操作的身分憑證。
-4. **Given** Email 或密碼錯誤，**When** 使用者嘗試登入，**Then** 系統拒絕請求且不指出是哪一項憑證錯誤。
+1. **Given** an Email is not yet registered and a password has at least 8 characters, **When** the user submits registration data, **Then** the system creates the account and returns a successful result without returning the plaintext password.
+2. **Given** an Email is already registered, **When** the user registers again with the same Email, **Then** the system rejects the request and returns a consistent validation-error format.
+3. **Given** a user is registered, **When** the user logs in with the correct Email and password, **Then** the system returns credentials that can be used for subsequent protected operations.
+4. **Given** an Email or password is invalid, **When** the user attempts to log in, **Then** the system rejects the request without indicating which credential was invalid.
 
 ---
 
-### User Story 2 - 管理個人 Todo (Priority: P1)
+### User Story 2 - Manage Personal Todos (Priority: P1)
 
-已登入使用者可以建立、查詢、更新與刪除自己的 Todo，並以標題、描述、到期日、優先級與完成狀態管理工作。
+Authenticated users can create, retrieve, update, and delete their own Todos, managing work with a title, description, due date, priority, and completion status.
 
-**Why this priority**: Todo 管理是產品最直接的日常價值，也是最小可用版本的核心工作流程。
+**Why this priority**: Todo management is the product's most direct everyday value and the core workflow of the minimum viable version.
 
-**Independent Test**: 可用單一已登入使用者獨立完成 Todo 的完整生命週期，並驗證必要欄位與無效資料被拒絕。
+**Independent Test**: A single authenticated user can independently complete the full Todo lifecycle and verify that required fields and invalid data are rejected.
 
 **Acceptance Scenarios**:
 
-1. **Given** 使用者已登入且提供有效標題，**When** 使用者建立 Todo，**Then** 系統儲存 Todo，設定預設未完成狀態，並回傳其資料。
-2. **Given** 使用者擁有 Todo，**When** 使用者查詢 Todo 清單或單筆 Todo，**Then** 系統回傳符合其條件的資料。
-3. **Given** 使用者擁有 Todo，**When** 使用者更新描述、到期日、優先級或完成狀態，**Then** 系統只更新指定欄位並回傳更新後資料。
-4. **Given** 使用者擁有 Todo，**When** 使用者刪除該 Todo，**Then** 系統刪除資料且後續查詢不再回傳該 Todo。
-5. **Given** Todo 標題為空或優先級不在允許範圍，**When** 使用者提交資料，**Then** 系統拒絕請求並指出欄位驗證錯誤。
-6. **Given** 使用者查詢 Todo 清單，**When** 使用者未提供分頁參數或提供有效的 `page` 與 `page_size`，**Then** 系統依預設每頁 20 筆或指定的每頁筆數回傳分頁結果，且每頁最多 100 筆。
+1. **Given** a user is authenticated and provides a valid title, **When** the user creates a Todo, **Then** the system stores the Todo, sets the default incomplete status, and returns its data.
+2. **Given** a user owns a Todo, **When** the user retrieves a Todo list or an individual Todo, **Then** the system returns data that meets the query criteria.
+3. **Given** a user owns a Todo, **When** the user updates the description, due date, priority, or completion status, **Then** the system updates only the specified fields and returns the updated data.
+4. **Given** a user owns a Todo, **When** the user deletes it, **Then** the system deletes the data and subsequent retrievals no longer return that Todo.
+5. **Given** a Todo title is empty or a priority is outside the permitted range, **When** the user submits data, **Then** the system rejects the request and identifies the field validation error.
+6. **Given** a user retrieves a Todo list, **When** the user omits pagination parameters or provides valid `page` and `page_size`, **Then** the system returns paginated results using the default 20 items per page or the specified page size, with no more than 100 items per page.
 
 ---
 
-### User Story 3 - 管理 Habit 並每日打卡 (Priority: P1)
+### User Story 3 - Manage Habits and Check In Daily (Priority: P1)
 
-已登入使用者可以建立、查詢、更新與刪除自己的 Habit，設定名稱、每日或每週頻率與目標次數，並在完成行動後每日打卡。系統依連續日期自動計算目前 streak 與最長 streak。
+Authenticated users can create, retrieve, update, and delete their own Habits, set a name, daily or weekly frequency, and target count, and check in daily after completing an activity. The system automatically calculates the current streak and longest streak from consecutive dates.
 
-**Why this priority**: Habit 追蹤是區別於一般 Todo 的核心功能，能提供持續使用的回饋。
+**Why this priority**: Habit tracking is the core capability that distinguishes the product from ordinary Todos and provides feedback for continued use.
 
-**Independent Test**: 可建立一個 Habit、連續多日打卡、重複打卡、間斷打卡，並單獨檢查 streak 結果。
+**Independent Test**: A Habit can be created, checked in on consecutive days, checked in more than once, and checked in with interruptions, and the streak results can be examined independently.
 
 **Acceptance Scenarios**:
 
-1. **Given** 使用者已登入且提供有效名稱、頻率與正整數目標次數，**When** 使用者建立 Habit，**Then** 系統儲存 Habit 並回傳其設定。
-2. **Given** 使用者擁有 Habit，**When** 使用者在某日期首次打卡，**Then** 系統記錄該日期且重新計算目前與最長 streak。
-3. **Given** Habit 在連續日期已有打卡，**When** 使用者完成下一個連續日期的打卡，**Then** 目前 streak 增加，最長 streak 不低於目前 streak。
-4. **Given** Habit 的打卡歷史中有中斷日期，**When** 使用者查詢 streak，**Then** 目前 streak 從最近一次連續區段計算，最長 streak 保留歷史最高值。
-5. **Given** 同一 Habit 同一日期已打卡，**When** 使用者再次打卡，**Then** 系統不產生重複紀錄，並回傳可辨識的衝突結果。
-6. **Given** 頻率或目標次數不符合規則，**When** 使用者建立或更新 Habit，**Then** 系統拒絕請求並回傳欄位驗證錯誤；Weekly 的目標次數必須是 1 至 7 的整數，Daily 的目標次數必須為 1。
-7. **Given** 使用者查詢 Habit 清單，**When** 使用者未提供分頁參數或提供有效的 `page` 與 `page_size`，**Then** 系統依預設每頁 20 筆或指定的每頁筆數回傳分頁結果，且每頁最多 100 筆。
+1. **Given** a user is authenticated and provides a valid name, frequency, and positive integer target count, **When** the user creates a Habit, **Then** the system stores the Habit and returns its configuration.
+2. **Given** a user owns a Habit, **When** the user checks in for the first time on a date, **Then** the system records that date and recalculates the current and longest streaks.
+3. **Given** a Habit has check-ins on consecutive dates, **When** the user completes a check-in on the next consecutive date, **Then** the current streak increases and the longest streak is no less than the current streak.
+4. **Given** a Habit's check-in history contains an interrupted date, **When** the user retrieves the streak, **Then** the current streak is calculated from the most recent consecutive segment and the longest streak retains the historical maximum.
+5. **Given** the same Habit has already been checked in on the same date, **When** the user checks in again, **Then** the system does not create a duplicate record and returns an identifiable conflict outcome.
+6. **Given** a frequency or target count does not meet the rules, **When** the user creates or updates a Habit, **Then** the system rejects the request and returns a field validation error; a Weekly target count must be an integer from 1 through 7, and a Daily target count must be 1.
+7. **Given** a user retrieves a Habit list, **When** the user omits pagination parameters or provides valid `page` and `page_size`, **Then** the system returns paginated results using the default 20 items per page or the specified page size, with no more than 100 items per page.
 
 ---
 
-### User Story 4 - 檢視進度並保護個人資料 (Priority: P2)
+### User Story 4 - View Progress and Protect Personal Data (Priority: P2)
 
-已登入使用者可以依日期範圍檢視 Todo 完成率與 Habit 打卡歷史，並確信其他使用者無法查詢、修改或刪除自己的資料。
+Authenticated users can view Todo completion rates and Habit check-in history by date range and can trust that other users cannot retrieve, modify, or delete their data.
 
-**Why this priority**: 進度回顧讓資料轉化為可行動的資訊；隔離資料則是信任與安全的必要條件。
+**Why this priority**: Progress review turns data into actionable information; data isolation is necessary for trust and security.
 
-**Independent Test**: 建立兩個使用者及各自資料，分別查詢日期範圍與他人識別碼，驗證統計結果與存取拒絕行為。
+**Independent Test**: Create two users and their respective data, then separately query date ranges and another user's identifiers to verify statistics and access-denial behavior.
 
 **Acceptance Scenarios**:
 
-1. **Given** 使用者在日期範圍內有已完成與未完成 Todo，**When** 使用者查詢完成率，**Then** 系統回傳該範圍內的分子、分母與完成率。
-2. **Given** 使用者有 Habit 打卡紀錄，**When** 使用者查詢有效日期範圍，**Then** 系統只回傳該範圍內按日期可辨識的打卡歷史。
-3. **Given** 使用者 A 擁有資料，**When** 使用者 B 嘗試以任何可取得的識別資訊查詢或操作該資料，**Then** 系統拒絕存取且不洩漏資料內容。
-4. **Given** 日期範圍缺少起始日、結束日早於起始日，或日期格式無效，**When** 使用者查詢統計資料，**Then** 系統拒絕請求並回傳一致的驗證錯誤。
+1. **Given** a user has completed and incomplete Todos in a date range, **When** the user queries the completion rate, **Then** the system returns the numerator, denominator, and completion rate for that range.
+2. **Given** a user has Habit check-in records, **When** the user queries a valid date range, **Then** the system returns only the date-identifiable check-in history within that range.
+3. **Given** user A owns data, **When** user B attempts to retrieve or operate on that data using any obtainable identifying information, **Then** the system denies access and does not expose the data content.
+4. **Given** a date range lacks a start date, has an end date before the start date, or has an invalid date format, **When** the user queries statistics, **Then** the system rejects the request and returns a consistent validation error.
 
 ### Edge Cases
 
-- 未登入、憑證無效或憑證過期時，所有受保護的 Todo、Habit、打卡與統計操作都被拒絕。
-- Access Token 過期時，系統使用有效的 7 天 Refresh Token 自動換發新的 15 分鐘 Access Token；Refresh Token 儲存於 HttpOnly Secure Cookie，任何 Token 不得儲存於 localStorage。
-- 使用者嘗試操作不存在或不屬於自己的 Todo、Habit 或打卡紀錄時，系統不得回傳其內容。
-- Todo 到期日可為空；若有值，必須是有效日期，且完成率計算只納入查詢範圍內的資料。
-- Todo 完成率的分母為零時，系統回傳明確且一致的零資料結果，不執行除以零。
-- Habit 名稱為空、頻率不是每日或每週、Daily 目標次數不是 1、Weekly 目標次數不在 1 至 7 或不是整數時，系統拒絕資料。
-- 密碼少於 8 個字元時，系統拒絕註冊資料。
-- 打卡日期不可產生重複紀錄；未來日期是否可打卡採用不允許的預設，以避免提前灌入進度。
-- 日期範圍為單日、跨月、跨年與很大的範圍時，結果仍使用相同格式並正確包含邊界日期。
-- 刪除 Habit 時，其打卡歷史不得在查詢中成為孤兒資料。
-- Todo 或 Habit 清單沒有資料時，分頁回應回傳空的 `items`，並保留一致的分頁 metadata，不回傳錯誤。
-- 使用者查詢超出最後一頁的頁碼時，系統回傳空的 `items` 與正確的總筆數及頁碼 metadata，不回傳錯誤。
-- `page_size` 未提供時預設為 20；`page_size` 可達到但不可超過最大單頁上限 100，超過上限或小於 1 時系統拒絕請求並回傳一致的驗證錯誤。
-- `page` 未提供時預設為 1；小於 1 或不是整數時系統拒絕請求並回傳一致的驗證錯誤。
+- When a user is not authenticated or credentials are invalid or expired, all protected Todo, Habit, check-in, and statistics operations are rejected.
+- When an Access Token expires, the system automatically renews it with a valid Refresh Token valid for 7 days; the Refresh Token is stored in an `HttpOnly`, `Secure`, `SameSite=Strict` Cookie, and no Token may be stored in `localStorage`. After a user actively logs out, the system revokes the current Refresh Token so subsequent renewal requests fail.
+- When a user attempts to operate on a nonexistent Todo, Habit, or check-in record, or one not owned by the user, the system must not return its content; deleting a nonexistent or unowned resource always returns a not-found resource outcome without distinguishing nonexistence from lack of authorization.
+- A Todo due date may be empty; if present, it must be a valid date, and completion-rate calculations include only data within the query range.
+- When the denominator of a Todo completion rate is zero, the system returns a clear and consistent zero-data result and does not divide by zero.
+- When a Habit name is empty, the frequency is neither daily nor weekly, the Daily target count is not 1, or the Weekly target count is not an integer from 1 through 7, the system rejects the data.
+- When a password has fewer than 8 characters, the system rejects the registration data.
+- A check-in date must not create duplicate records; concurrent check-in requests for the same Habit on the same date permit only one successful write, while all others return an identifiable conflict outcome and must not create a second record; future-date check-ins are disallowed by default to prevent progress from being recorded in advance.
+- When a date range is a single day, spans months, spans years, or is very large, results retain the same format and correctly include boundary dates.
+- When a Habit is deleted, its check-in history must not become orphaned data in queries.
+- When a Todo or Habit list has no data, the paginated response returns empty `items` and retains consistent pagination metadata rather than returning an error.
+- When a user queries a page beyond the last page, the system returns empty `items` with correct total-count and page metadata rather than returning an error.
+- When `page_size` is omitted, it defaults to 20; `page_size` may reach but not exceed the maximum per-page limit of 100, and the system rejects values above the limit or below 1 with a consistent validation error.
+- When `page` is omitted, it defaults to 1; the system rejects values below 1 or non-integers with a consistent validation error.
 
 ## Requirements _(mandatory)_
 
@@ -122,14 +128,18 @@
 - **FR-008**: System MUST allow an authenticated user to create a Habit with a name, Daily or Weekly frequency, and a frequency-valid target count; Daily MUST use target count 1, and Weekly MUST use an integer target count from 1 through 7.
 - **FR-009**: System MUST allow an authenticated user to list, retrieve, update, and delete only their own Habit records.
 - **FR-010**: System MUST allow an authenticated user to record at most one check-in per Habit per calendar date and MUST reject future-date check-ins.
-- **FR-011**: System MUST calculate Daily current streak as the length of the most recent uninterrupted daily check-in sequence and longest streak as the maximum uninterrupted daily sequence; Weekly streak MUST count consecutive calendar weeks in which at least the Habit target count of check-ins was recorded.
+- **FR-011**: System MUST calculate Daily current streak as the length of the most recent uninterrupted daily check-in sequence and longest streak as the maximum uninterrupted daily sequence; Weekly streak MUST count consecutive ISO 8601 calendar weeks, beginning on Monday, in which at least the Habit target count of check-ins was recorded.
 - **FR-012**: System MUST allow users to query Todo completion statistics by an inclusive `due_date` range, exclude Todo records without a `due_date`, and return completed count, total count, and completion rate.
 - **FR-013**: System MUST allow users to query their Habit check-in history by an inclusive date range with stable date ordering.
 - **FR-014**: System MUST return a consistent JSON response shape, standard HTTP status semantics, and a consistent error format for public operations.
-- **FR-015**: System MUST validate all external input before business rules execute, store passwords only as secure hashes, issue a Refresh Token valid for 7 days in an HttpOnly Secure Cookie for automatic Access Token renewal, never store tokens in localStorage, and never expose password hashes or authentication secrets in responses.
+- **FR-015**: System MUST validate all external input before business rules execute, store passwords only as secure hashes, issue a Refresh Token valid for 7 days in an `HttpOnly`, `Secure`, `SameSite=Strict` Cookie for automatic Access Token renewal, never store tokens in `localStorage`, and never expose password hashes or authentication secrets in responses.
 - **FR-016**: System MUST provide automatically generated OpenAPI documentation containing public request, response, error, and authentication examples.
 - **FR-017**: System MUST exclude team collaboration, sharing, notifications, and push notifications from the first phase.
 - **FR-018**: System MUST support pagination for Todo and Habit list queries using a positive `page` number and `page_size`; `page` MUST default to 1, `page_size` MUST default to 20, and `page_size` MUST NOT exceed the maximum of 100 items per page. The response MUST include the returned items and consistent pagination metadata including the current page, page size, total item count, and total page count. An empty list or a page beyond the last page MUST return an empty items collection with valid metadata rather than an error.
+- **FR-019**: System MUST allow an authenticated user to actively log out by revoking the current Refresh Token so that subsequent renewal requests using that token fail.
+- **FR-020**: System MUST return every error response in the format `{ "error": { "code": string, "message": string, "details": array } }`.
+- **FR-021**: System MUST treat a request to delete or update a Todo, Habit, or check-in record that does not exist or is not owned by the authenticated user as a not-found resource outcome, without distinguishing nonexistence from lack of authorization.
+- **FR-022**: System MUST allow only one concurrent check-in request for the same Habit and calendar date to create a record; all other concurrent requests for that Habit and date MUST return an identifiable conflict outcome and MUST NOT create an additional record.
 
 ### Non-Functional Requirements
 
@@ -165,9 +175,9 @@
 
 - Users have a stable internet connection and use one account per Email.
 - Email verification, password reset, social login, and multi-factor authentication are outside the first-phase scope.
-- Calendar dates and calendar weeks are interpreted in UTC; timezone customization is outside this feature.
+- Calendar dates and calendar weeks are interpreted in UTC; calendar weeks begin on Monday according to ISO 8601; timezone customization is outside this feature.
 - Todo priority and completion status use a small documented set of values; the exact labels are finalized during planning without changing the user workflows above.
-- Weekly Habit frequency records check-ins by calendar date, requires at least `target_count` check-ins per calendar week for that week to count toward streak, and limits `target_count` to 1 through 7; Daily Habit `target_count` is fixed at 1. Frequency-specific quota analytics beyond this streak rule are outside this feature.
+- Weekly Habit frequency records check-ins by calendar date, requires at least `target_count` check-ins per ISO 8601 calendar week beginning on Monday for that week to count toward streak, and limits `target_count` to 1 through 7; Daily Habit `target_count` is fixed at 1. Frequency-specific quota analytics beyond this streak rule are outside this feature.
 - Todo completion date-range statistics include both the start date and end date and filter Todo records by `due_date`; Todo records without a `due_date` are excluded.
 - The service uses the project's established authentication, validation, persistence, testing, and documentation conventions during planning.
 - No existing users or records need to be migrated for the first-phase release.

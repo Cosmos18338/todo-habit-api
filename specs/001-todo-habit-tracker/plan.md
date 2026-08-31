@@ -8,9 +8,9 @@
 
 ## Summary
 
-建立具備使用者隔離的 Todo/Habit Tracker REST API，涵蓋註冊登入、Todo 與 Habit CRUD、每日/每週打卡、streak 與進度查詢。採 FastAPI 分層架構，使用 SQLAlchemy 2.x 與 PostgreSQL，透過 Alembic 管理 schema；所有 mutation 以 Unit of Work 在同一交易內寫入業務資料與 immutable audit log。
+Build a Todo/Habit Tracker REST API with user isolation, covering registration and login, Todo and Habit CRUD, daily/weekly check-ins, streaks, and progress queries. Use a layered FastAPI architecture with SQLAlchemy 2.x and PostgreSQL, managing the schema through Alembic; all mutations use a Unit of Work to write business data and the immutable audit log in the same transaction.
 
-認證使用 PyJWT 簽發與驗證 15 分鐘 Access Token 及 7 天 Refresh Token。Access Token 僅由 client 記憶體攜帶，Refresh Token 存於 `HttpOnly; Secure` Cookie 並以 `jti`、token family 與 rotation state 支援自動換發及重放撤銷；任何 Token 不寫入 `localStorage`。密碼使用 `pwdlib` 的 Argon2id recommended 設定。
+Authentication uses PyJWT to issue and verify a 15-minute Access Token and a 7-day Refresh Token. The Access Token is carried only in client memory, while the Refresh Token is stored in an `HttpOnly; Secure` Cookie and uses `jti`, token family, and rotation state to support automatic renewal and replay revocation; no Token is written to `localStorage`. Passwords use `pwdlib`'s Argon2id recommended configuration.
 
 ## Technical Context
 
@@ -24,48 +24,48 @@
 
 **Primary Dependencies**: FastAPI, Pydantic v2, SQLAlchemy 2.x, psycopg 3, Alembic, PyJWT, pwdlib[argon2], pytest, pytest-cov, httpx
 
-**Storage**: PostgreSQL；audit_logs 與業務資料共用同一資料庫與 transaction，測試以獨立 PostgreSQL schema 優先
+**Storage**: PostgreSQL; `audit_logs` and business data share the same database and transaction, with an isolated PostgreSQL schema preferred for testing
 
-**Testing**: pytest + pytest-cov；HTTPX ASGI TestClient/AsyncClient；unit tests 驗證 schemas/services，integration tests 驗證 PostgreSQL transaction、constraints、audit 與 API contract
+**Testing**: pytest + pytest-cov; HTTPX ASGI TestClient/AsyncClient; unit tests validate schemas/services, and integration tests validate PostgreSQL transactions, constraints, audit records, and the API contract
 
-**Target Platform**: Docker Compose 本地 Linux container（API + PostgreSQL），可部署至一般 Linux container runtime
+**Target Platform**: Docker Compose local Linux container (API + PostgreSQL), deployable to a standard Linux container runtime
 
 **Project Type**: web-service / REST API
 
-**Performance Goals**: 正常服務條件下，至少 95% 的註冊、登入、Todo/Habit CRUD 請求於 2 秒內完成；依 SC-001、SC-002 驗證
+**Performance Goals**: Under normal service conditions, at least 95% of registration, login, and Todo/Habit CRUD requests complete within 2 seconds; validated according to SC-001 and SC-002
 
-**Constraints**: mutation 的業務寫入、streak 更新與 audit insert 必須同一 SQLAlchemy Session/transaction；commit 前不得回傳成功；request log 與 audit log 分離；不含協作、分享、通知或推播
+**Constraints**: Business writes, streak updates, and audit inserts for a mutation must use the same SQLAlchemy Session/transaction; success must not be returned before commit; request logs and audit logs are separate; collaboration, sharing, notifications, and push notifications are excluded
 
-**Scale/Scope**: 第一階段單一 API 服務與單一 PostgreSQL；個人使用者、Todo、Habit、Habit check-in、進度查詢與 OpenAPI 文件；不需既有資料 migration
+**Scale/Scope**: The first phase uses a single API service and a single PostgreSQL instance; it covers individual users, Todos, Habits, Habit check-ins, progress queries, and OpenAPI documentation; no existing data migration is needed
 
 ## CI/CD
 
-使用 GitHub Actions 的 `.github/workflows/ci.yml` 作為持續整合工作流。工作流必須在指向 `main` 的 Pull Request 發生 `opened`、`synchronize` 或 `reopened` 時觸發，確保來源分支每次新增 commit 都重新執行檢查；也必須在直接推送到 `main` 時執行，作為合併後的最終驗證。
+Use GitHub Actions `.github/workflows/ci.yml` as the continuous-integration workflow. The workflow must trigger when a Pull Request targeting `main` receives `opened`, `synchronize`, or `reopened`, ensuring checks rerun for every new commit on the source branch; it must also run on direct pushes to `main` as the final post-merge validation.
 
-CI job 依序執行：
+The CI job runs in this order:
 
-1. 安裝鎖定的 Python 版本與相依套件。
-2. 執行 `ruff check` 進行 Lint。
-3. 執行 Pytest 測試。
-4. 執行 `pytest --cov=app/services --cov=app/repositories`，並對 Service 與 Repository 個別套用至少 80% 覆蓋率門檻；任一層低於門檻時 workflow 必須失敗。
+1. Install the pinned Python version and dependencies.
+2. Run `ruff check` for linting.
+3. Run Pytest tests.
+4. Run `pytest --cov=app/services --cov=app/repositories` and apply an 80% minimum coverage threshold separately to Service and Repository; the workflow must fail if either layer is below its threshold.
 
-此工作流在專案骨架建立後立即建立，讓後續每個實作任務都可獲得 PR 與 main push 的 CI 回饋。
+Create this workflow immediately after the project skeleton is established so that every subsequent implementation task receives CI feedback for Pull Requests and pushes to `main`.
 
 ## Constitution Check
 
 _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
-| Gate                        | Status | Evidence / plan                                                                                                        |
-| --------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Test-first development      | PASS   | tasks.md 先建立 acceptance、contract、service/repository failing tests，再實作                                         |
-| Layered architecture        | PASS   | `app/routers`, `app/services`, `app/repositories`, `app/models`, `app/schemas`, `app/utils`；Router 不直接存取 Session |
-| Meaningful test design      | PASS   | 涵蓋密碼 7/8 邊界、Daily/Weekly target、日期範圍、空結果、權限隔離、streak 中斷與重複                                  |
-| Service/repository coverage | PASS   | CI 執行 pytest-cov，Service 與 Repository 各自至少 80%                                                                 |
-| REST consistency            | PASS   | 統一 success/error envelope、HTTP status 與 OpenAPI contract，契約測試固定格式                                         |
-| Secure-by-default identity  | PASS   | Pydantic v2、pwdlib Argon2id、PyJWT issuer/audience/type 驗證、HttpOnly Secure refresh cookie                          |
-| Reuse and abstraction       | PASS   | 共用認證、clock、request context、error、transaction 與 logging helper 放入 `app/utils/`                               |
-| Branching/version control   | PASS   | 使用既有 `001-todo-habit-tracker` feature branch；本規劃不 commit 或 push                                              |
-| API documentation           | PASS   | FastAPI OpenAPI schema 搭配 request/response/error/auth examples，quickstart 與 contract 同步驗證                      |
+| Gate                        | Status | Evidence / plan                                                                                                                                  |
+| --------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Test-first development      | PASS   | `tasks.md` creates acceptance, contract, and service/repository failing tests before implementation                                              |
+| Layered architecture        | PASS   | `app/routers`, `app/services`, `app/repositories`, `app/models`, `app/schemas`, `app/utils`; Router does not access Session directly             |
+| Meaningful test design      | PASS   | Covers password 7/8 boundaries, Daily/Weekly targets, date ranges, empty results, authorization isolation, and interrupted and duplicate streaks |
+| Service/repository coverage | PASS   | CI runs pytest-cov, with at least 80% for Service and Repository individually                                                                    |
+| REST consistency            | PASS   | A unified success/error envelope, HTTP status semantics, and OpenAPI contract, with contract tests fixing the format                             |
+| Secure-by-default identity  | PASS   | Pydantic v2, pwdlib Argon2id, PyJWT issuer/audience/type validation, HttpOnly Secure refresh cookie                                              |
+| Reuse and abstraction       | PASS   | Shared authentication, clock, request context, error, transaction, and logging helpers are placed in `app/utils/`                                |
+| Branching/version control   | PASS   | Uses the existing `001-todo-habit-tracker` feature branch; this plan does not commit or push                                                     |
+| API documentation           | PASS   | FastAPI OpenAPI schema with request/response/error/auth examples, with quickstart and contract validation kept in sync                           |
 
 ## Project Structure
 
